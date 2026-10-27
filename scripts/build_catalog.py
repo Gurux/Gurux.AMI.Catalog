@@ -12,7 +12,7 @@ import re
 import shutil
 import urllib.request
 from urllib.error import HTTPError
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 import zipfile
 import xml.etree.ElementTree as ET
 
@@ -29,6 +29,50 @@ def validate_references(references):
                 or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+', reference['version'])
                 or any(int(part) > 65535 for part in reference['version'].split('.'))):
             raise ValueError('references require a DLL basename and four-part assembly version')
+    return references
+
+
+METADATA_MAX_BYTES = 64 * 1024
+
+
+def fetch_compatibility_metadata(url):
+    """Download a small public sidecar without forwarding GitHub credentials."""
+    request = urllib.request.Request(url, headers={'User-Agent': 'Gurux-AMI-Catalog',
+                                                  'Accept': 'application/json'})
+    with urllib.request.urlopen(request, timeout=15) as response:
+        data = response.read(METADATA_MAX_BYTES + 1)
+    if len(data) > METADATA_MAX_BYTES:
+        raise ValueError('Compatibility metadata exceeds size limit')
+    return json.loads(data.decode('utf-8-sig'))
+
+
+def compatibility_references(source, release, version, fetch_metadata):
+    """Require the published sidecar belonging to this exact module release."""
+    name = f'{source["id"]}-{version}.compatibility.json'
+    matches = [asset for asset in release.get('assets', [])
+               if asset.get('name') == name and asset.get('state') == 'uploaded']
+    if len(matches) != 1:
+        raise ValueError(f'Expected exactly one uploaded compatibility sidecar: {name}')
+    url = matches[0].get('browser_download_url')
+    uri = urlparse(url) if isinstance(url, str) else None
+    expected_path = f'/{source["repository"]}/releases/download/{release["tag_name"]}/{name}'
+    if (uri is None or uri.scheme != 'https' or uri.netloc != 'github.com'
+            or uri.query or uri.fragment or unquote(uri.path) != expected_path):
+        raise ValueError(f'Invalid compatibility metadata download URL: {name}')
+    metadata = fetch_metadata(url)
+    if (not isinstance(metadata, dict) or type(metadata.get('schemaVersion')) is not int
+            or metadata['schemaVersion'] != 1 or metadata.get('id') != source['id']
+            or metadata.get('version') != version or metadata.get('targetFramework') != 'net10.0'):
+        raise ValueError(f'Invalid compatibility metadata identity or framework: {name}')
+    references = validate_references(metadata.get('references'))
+    if not references:
+        raise ValueError(f'Compatibility references must not be empty: {name}')
+    seen = set()
+    for reference in references:
+        key = reference['name'].lower()
+        if key in seen:
+            raise ValueError(f'Duplicate compatibility reference: {reference["name"]}')
+        seen.add(key)
     return references
 
 
@@ -165,7 +209,8 @@ def local_releases(source, source_directory, output_directory, base_url):
 
 
 def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
-                  source_directory='.', output_directory=None, base_url=None, fetch_commits=None):
+                  source_directory='.', output_directory=None, base_url=None, fetch_commits=None,
+                  fetch_metadata=None):
     if not isinstance(count, int) or count < 1:
         raise ValueError('count must be positive')
     entries = sources.get('items')
@@ -177,6 +222,7 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
     commit_cache = {}
     description_cache = {}
     fetch_commits = fetch_commits or fetch_release_commits
+    fetch_metadata = fetch_metadata or fetch_compatibility_metadata
     def description_for(source):
         description = source.get('description')
         if isinstance(description, str) and description.strip():
@@ -194,6 +240,10 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
         pattern = source.get('assetPattern')
         provider = source.get('source', 'github')
         tag_prefix = source.get('tagPrefix')
+        require_compatibility = source.get('compatibilityMetadata', False)
+        if (not isinstance(require_compatibility, bool)
+                or (require_compatibility and (provider != 'github' or source.get('type') != 'module'))):
+            raise ValueError('compatibilityMetadata requires a GitHub module source and boolean value')
         if 'tagPrefix' in source and (not isinstance(tag_prefix, str) or not tag_prefix.strip()):
             raise ValueError(f'tagPrefix must be a nonempty string for {identifier}')
         if provider not in ('github', 'local'):
@@ -268,15 +318,19 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
                 security = commit_cache[key]
             assets = []
             for asset in release.get('assets', []):
-                if asset.get('state', 'uploaded') != 'uploaded':
+                if asset.get('state', None if require_compatibility else 'uploaded') != 'uploaded':
                     continue
                 if fnmatch.fnmatchcase(asset['name'].lower(), pattern.lower()):
                     assets.append({'name': asset['name'], 'downloadUrl': asset['browser_download_url'],
                                    'size': asset['size'], 'digest': asset.get('digest')})
             version = tag[len(tag_prefix):] if tag_prefix is not None else (tag[1:] if tag.startswith(('v', 'V')) else tag)
+            references = ({'references': validate_references(release['references'])}
+                          if 'references' in release else {})
+            if require_compatibility and any(asset['name'].lower().endswith('.zip') for asset in assets):
+                references = {'references': compatibility_references(source, release, version, fetch_metadata)}
             versions.append({'version': version,
                              'priority': 'Critical' if security else 'Normal', 'isSecurityUpdate': security,
-                             **({'references': validate_references(release['references'])} if 'references' in release else {}),
+                             **references,
                              'tagName': tag, 'isPrerelease': bool(release.get('prerelease')),
                              'publishedAt': release['published_at'], 'releaseUrl': release.get('html_url'),
                              'releaseNotes': release.get('body'), 'assets': assets})

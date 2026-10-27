@@ -38,7 +38,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -47,6 +47,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Set up localization validator runtime
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install localization validator from NuGet
+        shell: bash
+        run: |
+          tool_directory="$RUNNER_TEMP/gurux-validator"
+          dotnet tool install Gurux.Updater.Tool --version 1.0.2610.2601 --tool-path "$tool_directory"
+          validator="$tool_directory/.store/gurux.updater.tool/1.0.2610.2601/gurux.updater.tool/1.0.2610.2601/tools/net10.0/any/Gurux.Updater.Tool.dll"
+          test -f "$validator"
+          echo "GURUX_LOCALIZATION_VALIDATOR=$validator" >> "$GITHUB_ENV"
       - name: Test catalog generator
         run: python3 -m unittest discover -s tests -v
       - name: Generate catalog
@@ -76,7 +88,7 @@ jobs:
   deploy:
     if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       pages: write

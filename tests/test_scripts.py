@@ -37,10 +37,11 @@ class ScriptHttpTests(unittest.TestCase):
         import subprocess
         import threading
         import urllib.request
-        from serve_catalog import create_server
-        tool = Path(__file__).resolve().parents[2] / 'Gurux.Updater.Net/Development/Gurux.Updater.Tool/bin/Debug/net10.0/Gurux.Updater.Tool.dll'
-        if not tool.exists():
-            self.skipTest('Build the sibling Gurux.Updater.Tool project for the CLI integration test')
+        from serve_catalog import create_server, localization_validator
+        try:
+            tool = localization_validator()
+        except RuntimeError:
+            self.skipTest('Set GURUX_LOCALIZATION_VALIDATOR or build Gurux.Updater.Tool for CLI integration')
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             sources = root / 'sources.json'
