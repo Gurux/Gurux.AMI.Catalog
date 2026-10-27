@@ -12,6 +12,8 @@ GitHub Actions generates the catalog and publishes it to GitHub Pages. Module ZI
 
 The generator copies the `localization/` directory beside `catalog-sources.json` into the Pages output, including its packages. Keep the index and the packages referenced by its relative paths in that directory so every deployment publishes them together.
 
+Script publication works similarly: keep `scripts/script-index.json` and its referenced source files under `scripts/files/` in the repository. The generator copies both into the Pages output, excluding Python build tools. The initial script index is empty.
+
 ## Module compatibility
 
 Modules configured with `compatibilityMetadata: true` supply a versioned `.compatibility.json` release asset. Catalog validates it and includes the required host DLL versions for AMI's pre-install compatibility check. Missing or invalid metadata preserves the previously published catalog.

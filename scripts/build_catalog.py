@@ -393,6 +393,13 @@ def generate_catalog(sources_path, output, count=10, include_prereleases=True, b
     localization = sources_path.parent / 'localization'
     if localization.is_dir() and localization.resolve() != (output.parent / 'localization').resolve():
         shutil.copytree(localization, output.parent / 'localization', dirs_exist_ok=True)
+    scripts = sources_path.parent / 'scripts'
+    published_scripts = output.parent / 'scripts'
+    if (scripts / 'script-index.json').is_file() and scripts.resolve() != published_scripts.resolve():
+        published_scripts.mkdir(parents=True, exist_ok=True)
+        if (scripts / 'files').is_dir():
+            shutil.copytree(scripts / 'files', published_scripts / 'files', dirs_exist_ok=True)
+        shutil.copy2(scripts / 'script-index.json', published_scripts / 'script-index.json')
     temporary = output.with_suffix('.tmp')
     feed = output.with_name('rss.xml')
     temporary_feed = feed.with_suffix('.tmp')
