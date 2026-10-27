@@ -1,0 +1,65 @@
+{
+  "items": [
+    {
+      "id": "Gurux.AMI.Scripts",
+      "type": "configuration",
+      "name": "AMI scripts",
+      "repository": "Gurux/Gurux.AMI.Catalog",
+      "indexUrl": "https://gurux.github.io/Gurux.AMI.Catalog/scripts/script-index.json",
+      "description": "Standalone C# scripts for AMI"
+    },
+    {
+      "id": "Gurux.AMI.SMTP",
+      "type": "module",
+      "name": "SMTP",
+      "description": "SMTP support for Gurux DLMS AMI.",
+      "repository": "Gurux/Gurux.DLMS.AMI.Modules",
+      "tagPrefix": "Gurux.AMI.SMTP/v",
+      "assetPattern": "Gurux.AMI.SMTP-*.zip"
+    },
+    {
+      "id": "Gurux.AMI.ExampleApplication",
+      "type": "application",
+      "name": "Example application",
+      "description": "",
+      "repository": "Gurux/REPLACE_WITH_APPLICATION_REPOSITORY",
+      "assetPattern": "Gurux.AMI.ExampleApplication-*.zip"
+    },
+    {
+      "id": "Gurux.AMI.ExampleAgent",
+      "type": "agent",
+      "name": "Example agent",
+      "description": "",
+      "repository": "Gurux/REPLACE_WITH_AGENT_REPOSITORY",
+      "assetPattern": "Gurux.AMI.ExampleAgent-*.zip"
+    },
+    {
+      "id": "Gurux.AMI.LocalTestModule",
+      "type": "module",
+      "source": "local",
+      "name": "Local test module",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "package": "./packages/Gurux.AMI.LocalTestModule-1.0.0.zip",
+          "publishedAt": "2026-10-07T09:00:00Z",
+          "releaseNotes": "Replace package with your local ZIP path"
+        }
+      ]
+    },
+    {
+      "id": "Gurux.AMI.LocalTestApplication",
+      "type": "application",
+      "source": "local",
+      "name": "Local test application",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "package": "./packages/Gurux.AMI.LocalTestApplication-1.0.0.zip",
+          "publishedAt": "2026-10-07T09:00:00Z",
+          "releaseNotes": "Replace package with your local application ZIP path"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+name: Publish AMI catalog
+
+on:
+  repository_dispatch:
+    types: [module-release]
+  push:
+    branches: [main]
+    paths:
+      - catalog-sources.json
+      - scripts/**
+      - tests/**
+      - .github/workflows/publish-catalog.yml
+  pull_request:
+    paths:
+      - catalog-sources.json
+      - scripts/**
+      - tests/**
+      - .github/workflows/publish-catalog.yml
+  workflow_dispatch:
+    inputs:
+      count:
+        description: Maximum number of releases per product
+        type: number
+        default: 10
+      include_prereleases:
+        description: Include beta, alpha and RC releases
+        type: boolean
+        default: true
+  schedule:
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ami-catalog-${{ github.event_name == 'pull_request' && github.ref || 'publish' }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Test catalog generator
+        run: python3 -m unittest discover -s tests -v
+      - name: Generate catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COUNT: ${{ github.event_name == 'workflow_dispatch' && inputs.count || 10 }}
+          INCLUDE_PRERELEASES: ${{ github.event_name != 'workflow_dispatch' || inputs.include_prereleases }}
+        shell: bash
+        run: |
+          args=(--count "$RELEASE_COUNT")
+          if [[ "$INCLUDE_PRERELEASES" != "true" ]]; then
+            args+=(--stable-only)
+          fi
+          python3 scripts/build_catalog.py "${args[@]}"
+          python3 -m json.tool _site/catalog.json > /dev/null
+          python3 -c "import xml.etree.ElementTree as ET; assert ET.parse('_site/rss.xml').getroot().tag == 'rss'"
+          touch _site/.nojekyll
+      - name: Configure Pages
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy catalog
+        id: deployment
+        uses: actions/deploy-pages@v4
