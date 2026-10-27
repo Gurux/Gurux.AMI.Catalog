@@ -8,6 +8,8 @@ GitHub Actions generates the catalog and publishes it to GitHub Pages. Module ZI
 
 - [catalog.json](https://gurux.github.io/Gurux.AMI.Catalog/catalog.json) — products, versions and download links.
 - [rss.xml](https://gurux.github.io/Gurux.AMI.Catalog/rss.xml) — the ten latest releases with release notes.
+
+The RSS feed lists releases across products in publication order, newest first. Generated configuration index pointers (`tagName: index`) are excluded: their synthetic version and generation time do not represent a new release.
 - [localization/localization-index.json](https://gurux.github.io/Gurux.AMI.Catalog/localization/localization-index.json) — localization releases (initially empty).
 
 The generator copies the `localization/` directory beside `catalog-sources.json` into the Pages output, including its packages. Keep the index and the packages referenced by its relative paths in that directory so every deployment publishes them together.

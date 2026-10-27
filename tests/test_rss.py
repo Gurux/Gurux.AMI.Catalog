@@ -11,6 +11,16 @@ from build_catalog import build_rss, generate_catalog
 
 
 class CatalogRssTests(unittest.TestCase):
+    def test_index_placeholders_do_not_displace_real_changes(self):
+        catalog = self.catalog()
+        for identifier in ('Gurux.DLMS.DeviceProfiles', 'Gurux.AMI.Localization', 'Gurux.AMI.Scripts'):
+            catalog['items'].append({'id': identifier, 'type': 'configuration', 'releases': [
+                {'version': '1.0.0', 'tagName': 'index', 'publishedAt': '2026-12-01T00:00:00Z'}]})
+        items = ET.fromstring(build_rss(catalog)).findall('channel/item')
+        self.assertEqual(len(items), 10)
+        self.assertEqual(items[0].findtext('title'), 'Agent 2.0')
+        self.assertFalse(any('1.0.0' in item.findtext('title') for item in items))
+
     def catalog(self):
         return {'generatedAt': '2026-10-27T12:00:00Z', 'items': [
             {'id': 'Module', 'name': 'Module & tools', 'description': 'JSON description <text>',

@@ -359,7 +359,9 @@ def build_rss(catalog, base_url=None):
         # XML 1.0 cannot represent these characters, even as escaped text.
         return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]', '', value or '')
 
-    releases = [(item, release) for item in catalog.get('items', []) for release in item.get('releases', [])]
+    # Configuration index pointers are generated metadata, not versioned changes.
+    releases = [(item, release) for item in catalog.get('items', []) for release in item.get('releases', [])
+                if not (item.get('type') == 'configuration' and release.get('tagName') == 'index')]
     releases.sort(key=lambda pair: (pair[0]['id'], pair[1]['version']))
     releases.sort(key=lambda pair: published(pair[1]), reverse=True)
     for product, release in releases[:10]:
