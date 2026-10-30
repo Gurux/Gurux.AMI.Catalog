@@ -1,0 +1,19 @@
+{
+  "sources": [
+    {
+      "repository": "Gurux/Gurux.DLMS.AMI.Modules",
+      "ref": "main",
+      "directory": "SMTP/localization",
+      "owner": "Gurux.AMI.SMTP",
+      "ownerType": "module",
+      "defaultCulture": "en",
+      "ownerVersionRange": "[1.0.0,2.0.0)"
+    },
+    {
+      "directory": "../GXDLMSDirector/localization",
+      "owner": "GXDLMSDirector",
+      "ownerType": "application",
+      "defaultCulture": "en"
+    }
+  ]
+}

@@ -1,6 +1,13 @@
 {
   "items": [
     {
+      "id": "Gurux.Resources",
+      "type": "configuration",
+      "name": "Resource packages",
+      "repository": "Gurux/Gurux.AMI.Catalog",
+      "indexUrl": "https://gurux.github.io/Gurux.AMI.Catalog/resources/resource-index.json"
+    },
+    {
       "id": "Gurux.AMI.Scripts",
       "type": "configuration",
       "name": "AMI scripts",
@@ -16,6 +23,9 @@
       "repository": "Gurux/Gurux.DLMS.AMI.Modules",
       "tagPrefix": "Gurux.AMI.SMTP/v",
       "compatibilityMetadata": true,
+      "maintenanceStatus": "active",
+      "category": "communication",
+      "audience": "operator",
       "assetPattern": "Gurux.AMI.SMTP-*.zip"
     },
     {

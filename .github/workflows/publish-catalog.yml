@@ -2,12 +2,15 @@ name: Publish AMI catalog
 
 on:
   repository_dispatch:
-    types: [module-release]
+    types: [module-release, localization-release, resources-release]
   push:
     branches: [main]
     paths:
       - catalog-sources.json
       - localization/**
+      - localization-sources.json
+      - content-release-sources.json
+      - resources/**
       - scripts/**
       - tests/**
       - .github/workflows/publish-catalog.yml
@@ -15,6 +18,9 @@ on:
     paths:
       - catalog-sources.json
       - localization/**
+      - localization-sources.json
+      - content-release-sources.json
+      - resources/**
       - scripts/**
       - tests/**
       - .github/workflows/publish-catalog.yml
@@ -43,26 +49,49 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
-      contents: read
+      contents: write
       pages: read
     steps:
       - uses: actions/checkout@v6
         with:
+          # Re-read current history after the workflow concurrency queue.
+          ref: ${{ github.event_name == 'pull_request' && github.ref || github.event.repository.default_branch }}
+          persist-credentials: true
+      - name: Checkout shared localization engine
+        uses: actions/checkout@v6
+        with:
+          repository: Gurux/Gurux.Updater.Net
+          ref: main
+          path: .updater
           persist-credentials: false
       - name: Set up localization validator runtime
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
-      - name: Install localization validator from NuGet
+      - name: Build shared localization engine
         shell: bash
         run: |
-          tool_directory="$RUNNER_TEMP/gurux-validator"
-          dotnet tool install Gurux.Updater.Tool --version 1.0.2610.2601 --tool-path "$tool_directory"
-          validator="$tool_directory/.store/gurux.updater.tool/1.0.2610.2601/gurux.updater.tool/1.0.2610.2601/tools/net10.0/any/Gurux.Updater.Tool.dll"
+          dotnet build .updater/Development/Gurux.Updater.Tool -c Release
+          validator="$GITHUB_WORKSPACE/.updater/Development/Gurux.Updater.Tool/bin/Release/net10.0/Gurux.Updater.Tool.dll"
           test -f "$validator"
           echo "GURUX_LOCALIZATION_VALIDATOR=$validator" >> "$GITHUB_ENV"
       - name: Test catalog generator
         run: python3 -m unittest discover -s tests -v
+      - name: Import successfully published content Releases
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_REPOSITORY: ${{ github.event.client_payload.repository }}
+          DISPATCH_TAG: ${{ github.event.client_payload.tag }}
+          DISPATCH_EVENT: ${{ github.event.action }}
+        shell: bash
+        run: |
+          args=()
+          if [[ "$DISPATCH_EVENT" == "localization-release" || "$DISPATCH_EVENT" == "resources-release" ]]; then
+            test -n "$DISPATCH_REPOSITORY" && test -n "$DISPATCH_TAG"
+            args+=(--repository "$DISPATCH_REPOSITORY" --tag "$DISPATCH_TAG")
+          fi
+          python3 scripts/import_content_releases.py "${args[@]}"
       - name: Generate catalog
         env:
           GH_TOKEN: ${{ github.token }}
@@ -78,6 +107,19 @@ jobs:
           python3 -m json.tool _site/catalog.json > /dev/null
           python3 -c "import xml.etree.ElementTree as ET; assert ET.parse('_site/rss.xml').getroot().tag == 'rss'"
           touch _site/.nojekyll
+          dotnet "$GURUX_LOCALIZATION_VALIDATOR" localization validate-store --index _site/localization/localization-index.json
+          dotnet "$GURUX_LOCALIZATION_VALIDATOR" content validate-resources --catalog-root _site
+      - name: Commit immutable history before deploying its complete artifact
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        shell: bash
+        run: |
+          git add -- localization/ resources/
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Publish changed localization packages [skip ci]"
+            git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          fi
       - name: Configure Pages
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: actions/configure-pages@v6

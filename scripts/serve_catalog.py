@@ -21,6 +21,7 @@ import zipfile
 import zlib
 
 from build_catalog import build_catalog, build_rss, generate_catalog, validate_references
+from catalog_metadata import release_metadata
 from script_catalog import register_script, atomic_json
 
 SERVER_VERSION = '1.2.0'
@@ -107,10 +108,14 @@ def upload_metadata(query):
         values = parse_qs(query, keep_blank_values=True, strict_parsing=True)
     except ValueError as error:
         raise UploadError(400, 'Invalid upload query') from error
-    allowed = {'product', 'type', 'version', 'filename', 'name', 'prerelease', 'references'}
+    allowed = {'product', 'type', 'version', 'filename', 'name', 'prerelease', 'references', 'amiVersionRange'}
     if set(values) - allowed or any(len(value) != 1 for value in values.values()):
         raise UploadError(400, 'Unknown or repeated upload parameter')
     metadata = {key: value[0] for key, value in values.items()}
+    try:
+        release_metadata(metadata)
+    except ValueError as error:
+        raise UploadError(400, str(error)) from error
     if 'references' in metadata:
         try:
             metadata['references'] = validate_references(json.loads(metadata['references']))
@@ -204,74 +209,17 @@ class CatalogRegistry:
         self.lock = threading.Lock()
 
     def register_localization(self, body):
-        validate_localization(body)
-        package = json.loads(body)
-        owner = package['owner']
-        version = package['version']
-        resources = package['resources']
-        description = package.get('description')
-        if not isinstance(description, str) or not description.strip():
-            description = f"Localized resources for {owner} {package['ownerType']}"
-
-        def version_key(value):
-            numeric, _, prerelease = value.split('+', 1)[0].partition('-')
-            parts = [int(part) for part in numeric.split('.')]
-            parts += [0] * (4 - len(parts))
-            labels = tuple(str(int(label)) if label.isdigit() else label.lower()
-                           for label in prerelease.split('.')) if prerelease else ()
-            return tuple(parts), labels
-
+        # Python routes requests only. C# owns JSON validation, hashes, versions,
+        # locking and index-last publication for both wire formats.
+        from localization_catalog import publish_request, copy_history, LocalizationPublicationError
+        persistent = self.sources.parent / 'localization'
         with self.lock:
-            directory = self.directory / 'localization'
-            directory.mkdir(parents=True, exist_ok=True)
-            index = directory / 'localization-index.json'
-            catalog = json.loads(index.read_text(encoding='utf-8-sig')) if index.exists() else {'schemaVersion': 1, 'items': []}
-            digest = hashlib.sha256(body).hexdigest()
-            item = next((item for item in catalog['items'] if item['owner'].lower() == owner.lower()), None)
-            if item is not None:
-                if (item['owner'] == owner and item['ownerType'] == package['ownerType']
-                        and any(version_key(release['version']) == version_key(version) and release['sha256'] == digest for release in item['releases'])):
-                    return 200, catalog
-                if item['owner'] != owner or item['ownerType'] != package['ownerType']:
-                    raise UploadError(409, 'Localization owner identity or type conflict')
-                if any(version_key(release['version']) == version_key(version) for release in item['releases']):
-                    raise UploadError(409, f"Version {version} has different content for {owner}; increase version")
-            relative = f'packages/{owner}/{version}.json'
-            target = directory / relative
-            if target.exists():
-                raise UploadError(409, 'Localization package path already exists')
-            release = {key: package[key] for key in ('version', 'ownerVersionRange', 'defaultCulture', 'description', 'releaseNotes') if key in package}
-            release['description'] = description
-            release.update({'cultures': list(resources), 'path': relative, 'size': len(body), 'sha256': digest})
-            if item is None:
-                catalog['items'].append({'owner': owner, 'ownerType': package['ownerType'],
-                                         'description': description, 'releases': [release]})
-            else:
-                if not isinstance(item.get('description'), str) or not item['description'].strip():
-                    item['description'] = description
-                item['releases'].append(release)
-            catalog['generatedAt'] = datetime.now(timezone.utc).isoformat()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            descriptor, filename = tempfile.mkstemp(prefix='.localization-', dir=target.parent)
-            temporary = Path(filename)
-            staged_index = None
-            installed = False
             try:
-                with os.fdopen(descriptor, 'wb') as stream:
-                    stream.write(body)
-                staged_index = staged_json(index, catalog)
-                os.replace(temporary, target)
-                installed = True
-                os.replace(staged_index, index)
-            except BaseException:
-                if installed:
-                    target.unlink(missing_ok=True)
-                raise
-            finally:
-                temporary.unlink(missing_ok=True)
-                if staged_index is not None:
-                    staged_index.unlink(missing_ok=True)
-            return 201, catalog
+                status, result = publish_request(body, persistent / 'localization-index.json')
+            except LocalizationPublicationError as error:
+                raise UploadError(error.status, str(error)) from error
+            copy_history(persistent, self.directory / 'localization', validate=False)
+            return status, result
 
     def register(self, metadata, temporary, digest):
         with self.lock:
@@ -303,6 +251,7 @@ class CatalogRegistry:
             if not destination.exists():
                 os.replace(temporary, destination)
             item['releases'].append({'version': metadata['version'], 'package': str(destination),
+                                     **release_metadata(metadata),
                                      **({'references': metadata['references']} if 'references' in metadata else {}),
                                      'publishedAt': datetime.now(timezone.utc).isoformat(),
                                      'isPrerelease': metadata['isPrerelease']})

@@ -27,6 +27,15 @@ def package_bytes(name='module.txt', content='local package'):
 
 
 class UploadCatalogTests(unittest.TestCase):
+    def test_upload_preserves_declared_ami_range(self):
+        status, catalog = self.post(amiVersionRange='[4.1,5.0)')
+        self.assertEqual(status, 201)
+        self.assertEqual(catalog['items'][-1]['releases'][0]['amiVersionRange'], '[4.1,5.0)')
+        self.stop()
+        self.start()
+        item = next(item for item in self.catalog()['items'] if item['id'] == 'New.Module')
+        self.assertEqual(item['releases'][0]['amiVersionRange'], '[4.1,5.0)')
+
     def test_uploaded_release_updates_rss(self):
         status, _ = self.post(product='Feed.Module', version='9.0.0', name='Feed product')
         self.assertEqual(status, 201)

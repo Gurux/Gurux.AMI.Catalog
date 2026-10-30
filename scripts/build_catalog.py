@@ -15,6 +15,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote, unquote, urlparse
 import zipfile
 import xml.etree.ElementTree as ET
+from catalog_metadata import project_metadata, release_metadata
 
 
 def validate_references(references):
@@ -73,7 +74,7 @@ def compatibility_references(source, release, version, fetch_metadata):
         if key in seen:
             raise ValueError(f'Duplicate compatibility reference: {reference["name"]}')
         seen.add(key)
-    return references
+    return {'references': references, **release_metadata(metadata)}
 
 
 def github_json(url):
@@ -199,6 +200,7 @@ def local_releases(source, source_directory, output_directory, base_url):
         if not isinstance(prerelease, bool):
             raise ValueError('Local isPrerelease must be a boolean')
         result.append({'tag_name': release.get('tagName', 'v' + version),
+                       **release_metadata(release),
                        **({'references': validate_references(release['references'])} if 'references' in release else {}),
                        'published_at': published, 'prerelease': prerelease,
                        'html_url': release.get('releaseUrl'), 'body': release.get('releaseNotes'),
@@ -235,6 +237,7 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
         return description_cache[key]
 
     for source in entries:
+        metadata = project_metadata(source)
         identifier = source.get('id')
         repository = source.get('repository', '')
         pattern = source.get('assetPattern')
@@ -265,8 +268,14 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
             asset_name = Path(uri.path).name
             if not asset_name:
                 raise ValueError(f'indexUrl must identify an index file for {identifier}')
+            if base_url and asset_name in ('localization-index.json', 'resource-index.json'):
+                # The development server publishes its own durable localization
+                # store. Do not direct local CLI uploads to read-only Pages.
+                directory = 'localization' if asset_name == 'localization-index.json' else 'resources'
+                index_url = base_url.rstrip('/') + '/' + directory + '/' + asset_name
             seen.add(identifier)
             items.append({'id': identifier, 'type': 'configuration', 'name': source.get('name', identifier),
+                          **metadata,
                           'description': description_for(source), 'repository': repository,
                           'releases': [{'version': '1.0.0', 'tagName': 'index', 'isPrerelease': False,
                                         'publishedAt': datetime.now(timezone.utc).isoformat(),
@@ -326,8 +335,9 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
             version = tag[len(tag_prefix):] if tag_prefix is not None else (tag[1:] if tag.startswith(('v', 'V')) else tag)
             references = ({'references': validate_references(release['references'])}
                           if 'references' in release else {})
+            references.update(release_metadata(release))
             if require_compatibility and any(asset['name'].lower().endswith('.zip') for asset in assets):
-                references = {'references': compatibility_references(source, release, version, fetch_metadata)}
+                references = compatibility_references(source, release, version, fetch_metadata)
             versions.append({'version': version,
                              'priority': 'Critical' if security else 'Normal', 'isSecurityUpdate': security,
                              **references,
@@ -335,6 +345,7 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
                              'publishedAt': release['published_at'], 'releaseUrl': release.get('html_url'),
                              'releaseNotes': release.get('body'), 'assets': assets})
         items.append({'id': identifier, 'type': source['type'], 'name': source.get('name', identifier),
+                      **metadata,
                       'description': description_for(source), 'repository': repository,
                       'releases': versions})
     return {'schemaVersion': 1, 'generatedAt': datetime.now(timezone.utc).isoformat(), 'items': items}
@@ -394,7 +405,12 @@ def generate_catalog(sources_path, output, count=10, include_prereleases=True, b
     # package it references, rather than publishing a dangling catalog URL.
     localization = sources_path.parent / 'localization'
     if localization.is_dir() and localization.resolve() != (output.parent / 'localization').resolve():
-        shutil.copytree(localization, output.parent / 'localization', dirs_exist_ok=True)
+        from localization_catalog import copy_history
+        copy_history(localization, output.parent / 'localization')
+    resources = sources_path.parent / 'resources'
+    if resources.is_dir() and resources.resolve() != (output.parent / 'resources').resolve():
+        from localization_catalog import copy_history
+        copy_history(resources, output.parent / 'resources', index_name='resource-index.json')
     scripts = sources_path.parent / 'scripts'
     published_scripts = output.parent / 'scripts'
     if (scripts / 'script-index.json').is_file() and scripts.resolve() != published_scripts.resolve():

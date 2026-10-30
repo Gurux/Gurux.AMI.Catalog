@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Package integrity hashes cover exact bytes, including legacy JSON line endings.
+localization/packages/** -text
+localization/localization-index.json text eol=lf
+resources/packages/** -text
+resources/resource-index.json text eol=lf

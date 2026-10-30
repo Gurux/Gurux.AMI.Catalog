@@ -1,0 +1,6 @@
+{
+  "repositories": [
+    "Gurux/Gurux.Updater.Net",
+    "Gurux/Gurux.DLMS.AMI.Modules"
+  ]
+}

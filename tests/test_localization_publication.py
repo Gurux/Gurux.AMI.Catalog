@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 import sys
 import tempfile
@@ -20,10 +21,12 @@ class LocalizationPublicationTests(unittest.TestCase):
             localization = root / 'localization'
             package = localization / 'packages/Core/1.0.0.json'
             package.parent.mkdir(parents=True)
-            package.write_bytes(b'{"resources": {}}')
+            package.write_bytes(b'{"schemaVersion":1,"owner":"Core","ownerType":"application","version":"1.0.0","defaultCulture":"en","resources":{"en":{"Title":"Mail"}}}')
             index = localization / 'localization-index.json'
             index.write_text(json.dumps({'schemaVersion': 1, 'items': [
-                {'owner': 'Core', 'releases': [{'path': 'packages/Core/1.0.0.json'}]}
+                {'owner': 'Core', 'ownerType': 'application', 'releases': [{'path': 'packages/Core/1.0.0.json',
+                    'version': '1.0.0', 'defaultCulture': 'en', 'cultures': ['en'], 'size': package.stat().st_size,
+                    'sha256': hashlib.sha256(package.read_bytes()).hexdigest()}]}
             ]}), encoding='utf-8')
             output = root / '_site/catalog.json'
             with patch('build_catalog.fetch_description', return_value=''):

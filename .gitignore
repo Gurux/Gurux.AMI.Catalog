@@ -3,3 +3,10 @@
 /scripts/__pycache__
 /tests/__pycache__
 *.log
+/localization/*.lock
+/localization/**/*.tmp
+/_site/
+/.updater/
+/local-work/
+/resources/*.lock
+/resources/**/*.tmp
