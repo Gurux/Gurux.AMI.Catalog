@@ -395,7 +395,7 @@ def build_rss(catalog, base_url=None):
     return ET.tostring(rss, encoding='utf-8', xml_declaration=True).decode('utf-8') + '\n'
 
 
-def generate_catalog(sources_path, output, count=10, include_prereleases=True, base_url=None):
+def generate_catalog(sources_path, output, count=10, include_prereleases=True, base_url=None, *, fetch_icon=None):
     """Generate packages and atomically replace the catalog after a successful build."""
     sources_path = Path(sources_path).resolve()
     output = Path(output)
@@ -403,10 +403,15 @@ def generate_catalog(sources_path, output, count=10, include_prereleases=True, b
     catalog = build_catalog(sources, fetch_releases, count, include_prereleases,
                             source_directory=sources_path.parent,
                             output_directory=output.parent, base_url=base_url)
+    from module_icons import prepare_icons
+    icons = prepare_icons(sources, catalog, fetch_icon, base_url)
     output.parent.mkdir(parents=True, exist_ok=True)
     assets = sources_path.parent / 'assets'
     if assets.is_dir() and assets.resolve() != (output.parent / 'assets').resolve():
-        shutil.copytree(assets, output.parent / 'assets', dirs_exist_ok=True)
+        managed = {path.removeprefix('assets/') for path in icons}
+        shutil.copytree(assets, output.parent / 'assets', dirs_exist_ok=True,
+                        ignore=lambda directory, names: [name for name in names
+                            if (Path(directory).relative_to(assets) / name).as_posix() in managed])
     # Pages deploys only the output directory. Include the index and every
     # package it references, rather than publishing a dangling catalog URL.
     localization = sources_path.parent / 'localization'
@@ -433,11 +438,28 @@ def generate_catalog(sources_path, output, count=10, include_prereleases=True, b
     temporary.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     temporary_feed.write_text(rss, encoding='utf-8')
     feed_replaced = False
+    staged_icons = []
+    replaced_icons = []
     try:
+        for relative, data in icons.items():
+            destination = output.parent / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            original = destination.read_bytes() if destination.exists() else None
+            staged = destination.with_name(destination.name + '.tmp')
+            staged_icons.append((staged, destination, original))
+            staged.write_bytes(data)
+        for staged, destination, original in staged_icons:
+            staged.replace(destination)
+            replaced_icons.append((destination, original))
         temporary_feed.replace(feed)
         feed_replaced = True
         temporary.replace(output)
     except BaseException:
+        for destination, original in reversed(replaced_icons):
+            if original is None:
+                destination.unlink(missing_ok=True)
+            else:
+                destination.write_bytes(original)
         if feed_replaced:
             if original_feed is None:
                 feed.unlink(missing_ok=True)
@@ -446,6 +468,8 @@ def generate_catalog(sources_path, output, count=10, include_prereleases=True, b
                 temporary_feed.replace(feed)
         raise
     finally:
+        for staged, _, _ in staged_icons:
+            staged.unlink(missing_ok=True)
         temporary.unlink(missing_ok=True)
         temporary_feed.unlink(missing_ok=True)
     return catalog

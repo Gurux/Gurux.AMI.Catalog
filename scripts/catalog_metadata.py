@@ -1,5 +1,6 @@
 """Validation for optional project metadata and declared AMI compatibility."""
 import re
+from urllib.parse import urlparse
 
 MAINTENANCE_STATUSES = ('active', 'minimal', 'seeking-maintainer', 'unsupported')
 VERSION = r'[0-9]+(?:\.[0-9]+){0,3}(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?(?:\+[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?'
@@ -7,6 +8,12 @@ VERSION = r'[0-9]+(?:\.[0-9]+){0,3}(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?(?:\+[
 
 def project_metadata(source):
     result = {}
+    if 'iconUrl' in source:
+        value = source['iconUrl']
+        uri = urlparse(value) if isinstance(value, str) else None
+        if uri is None or uri.scheme != 'https' or not uri.netloc or uri.username or uri.password:
+            raise ValueError('Invalid iconUrl')
+        result['iconUrl'] = value
     for field in ('maintenanceStatus', 'category', 'audience'):
         if field not in source:
             continue

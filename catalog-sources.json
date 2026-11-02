@@ -52,7 +52,8 @@
             "tagPrefix": "Gurux.AMI.SMTP/v",
             "compatibilityMetadata": true,
             "iconUrl": "https://gurux.github.io/Gurux.AMI.Catalog/assets/Gurux.AMI.SMTP/Smtp.svg",
-            "assetPattern": "Gurux.AMI.SMTP-*.zip"
+            "assetPattern": "Gurux.AMI.SMTP-*.zip",
+            "iconPath": "Gurux.AMI.SMTP/assets/Smtp.svg"
         },
         {
             "id": "Gurux.AMI.OpenApi",
@@ -66,7 +67,8 @@
             "tagPrefix": "Gurux.AMI.OpenApi/v",
             "compatibilityMetadata": true,
             "iconUrl": "https://gurux.github.io/Gurux.AMI.Catalog/assets/Gurux.AMI.OpenApi/OpenApi.svg",
-            "assetPattern": "Gurux.AMI.OpenApi-*.zip"
+            "assetPattern": "Gurux.AMI.OpenApi-*.zip",
+            "iconPath": "Gurux.AMI.OpenApi/assets/OpenApi.svg"
         },
         {
             "id": "Gurux.AMI.Scalar",
@@ -80,7 +82,8 @@
             "tagPrefix": "Gurux.AMI.Scalar/v",
             "compatibilityMetadata": true,
             "iconUrl": "https://gurux.github.io/Gurux.AMI.Catalog/assets/Gurux.AMI.Scalar/Scalar.svg",
-            "assetPattern": "Gurux.AMI.Scalar-*.zip"
+            "assetPattern": "Gurux.AMI.Scalar-*.zip",
+            "iconPath": "Gurux.AMI.Scalar/assets/Scalar.svg"
         },
         {
             "id": "Gurux.AMI.Swagger",
@@ -94,7 +97,8 @@
             "tagPrefix": "Gurux.AMI.Swagger/v",
             "compatibilityMetadata": true,
             "iconUrl": "https://gurux.github.io/Gurux.AMI.Catalog/assets/Gurux.AMI.Swagger/Swagger.svg",
-            "assetPattern": "Gurux.AMI.Swagger-*.zip"
+            "assetPattern": "Gurux.AMI.Swagger-*.zip",
+            "iconPath": "Gurux.AMI.Swagger/assets/Swagger.svg"
         }
     ]
 }
