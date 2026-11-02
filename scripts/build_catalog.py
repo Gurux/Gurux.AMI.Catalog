@@ -404,6 +404,9 @@ def generate_catalog(sources_path, output, count=10, include_prereleases=True, b
                             source_directory=sources_path.parent,
                             output_directory=output.parent, base_url=base_url)
     output.parent.mkdir(parents=True, exist_ok=True)
+    assets = sources_path.parent / 'assets'
+    if assets.is_dir() and assets.resolve() != (output.parent / 'assets').resolve():
+        shutil.copytree(assets, output.parent / 'assets', dirs_exist_ok=True)
     # Pages deploys only the output directory. Include the index and every
     # package it references, rather than publishing a dangling catalog URL.
     localization = sources_path.parent / 'localization'

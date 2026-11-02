@@ -51,6 +51,7 @@
             "repository": "Gurux/Gurux.AMI.Modules",
             "tagPrefix": "Gurux.AMI.SMTP/v",
             "compatibilityMetadata": true,
+            "iconUrl": "https://gurux.github.io/Gurux.AMI.Catalog/assets/Gurux.AMI.SMTP/Smtp.svg",
             "assetPattern": "Gurux.AMI.SMTP-*.zip"
         },
         {
@@ -64,6 +65,7 @@
             "repository": "Gurux/Gurux.AMI.Modules",
             "tagPrefix": "Gurux.AMI.OpenApi/v",
             "compatibilityMetadata": true,
+            "iconUrl": "https://gurux.github.io/Gurux.AMI.Catalog/assets/Gurux.AMI.OpenApi/OpenApi.svg",
             "assetPattern": "Gurux.AMI.OpenApi-*.zip"
         },
         {
@@ -77,6 +79,7 @@
             "repository": "Gurux/Gurux.AMI.Modules",
             "tagPrefix": "Gurux.AMI.Scalar/v",
             "compatibilityMetadata": true,
+            "iconUrl": "https://gurux.github.io/Gurux.AMI.Catalog/assets/Gurux.AMI.Scalar/Scalar.svg",
             "assetPattern": "Gurux.AMI.Scalar-*.zip"
         },
         {
@@ -90,6 +93,7 @@
             "repository": "Gurux/Gurux.AMI.Modules",
             "tagPrefix": "Gurux.AMI.Swagger/v",
             "compatibilityMetadata": true,
+            "iconUrl": "https://gurux.github.io/Gurux.AMI.Catalog/assets/Gurux.AMI.Swagger/Swagger.svg",
             "assetPattern": "Gurux.AMI.Swagger-*.zip"
         }
     ]

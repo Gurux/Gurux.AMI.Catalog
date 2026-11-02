@@ -73,6 +73,34 @@ class CatalogRssTests(unittest.TestCase):
             self.assertEqual(len(json.loads(output.read_text(encoding='utf-8'))['items']), 2)
             self.assertEqual(len(ET.parse(output.with_name('rss.xml')).findall('channel/item')), 10)
 
+    def test_catalog_generation_copies_assets_to_pages_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sources = root / 'sources.json'
+            sources.write_text('{"items":[]}', encoding='utf-8')
+            icon = root / 'assets' / 'Gurux.AMI.SMTP' / 'Smtp.svg'
+            icon.parent.mkdir(parents=True)
+            icon.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding='utf-8')
+            output = root / '_site' / 'catalog.json'
+            published = output.parent / 'assets' / 'Gurux.AMI.SMTP' / 'Smtp.svg'
+            published.parent.mkdir(parents=True)
+            published.write_text('old icon', encoding='utf-8')
+            with patch('build_catalog.build_catalog', return_value=self.catalog()):
+                generate_catalog(sources, output)
+            self.assertEqual(published.read_bytes(), icon.read_bytes())
+
+    def test_catalog_generation_with_assets_already_in_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sources = root / 'sources.json'
+            sources.write_text('{"items":[]}', encoding='utf-8')
+            icon = root / 'assets' / 'Smtp.svg'
+            icon.parent.mkdir()
+            icon.write_text('<svg/>', encoding='utf-8')
+            with patch('build_catalog.build_catalog', return_value=self.catalog()):
+                generate_catalog(sources, root / 'catalog.json')
+            self.assertEqual(icon.read_text(encoding='utf-8'), '<svg/>')
+
     def test_failed_catalog_build_preserves_previous_json_and_feed(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
