@@ -39,6 +39,16 @@ class ModuleReleaseTests(unittest.TestCase):
         self.assertFalse(other['releases'][0]['isSecurityUpdate'])
         self.assertIn('fix(security): SMTP authentication', ET.fromstring(build_rss(catalog)).findtext('channel/item/description'))
 
+    def test_content_tags_never_become_binary_versions_without_prefix(self):
+        source = self.source()
+        del source['tagPrefix']
+        releases = [self.release('SMTP', '1.0.0', 1),
+                    {**self.release('SMTP', '9.0.0', 2), 'tag_name': 'Gurux.AMI.SMTP/localization/v9.0.0'},
+                    {**self.release('SMTP', '8.0.0', 3), 'tag_name': 'Gurux.AMI.SMTP/assets/v8.0.0'}]
+        with patch('build_catalog.fetch_release_commits', return_value=[]):
+            result = build_catalog({'items': [source]}, lambda repo: releases)
+        self.assertEqual([r['tagName'] for r in result['items'][0]['releases']], ['Gurux.AMI.SMTP/v1.0.0'])
+
     def test_invalid_prefix_fails(self):
         for prefix in ('', 1, None):
             with self.subTest(prefix=prefix), self.assertRaises(ValueError):

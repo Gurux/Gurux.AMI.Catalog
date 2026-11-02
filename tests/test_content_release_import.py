@@ -94,8 +94,111 @@ class ContentReleaseImportTests(unittest.TestCase):
             import_releases(self.allowlist, self.catalog, self.validator, 'Owner/Source', 'localization/App/fi-FI/v1.0.0', runner=self.runner)
         self.assertFalse(self.catalog.exists())
 
+    def test_legacy_content_requires_matching_annotated_manifest(self):
+        for mode in ('lightweight', 'changed-annotation'):
+            def runner(arguments):
+                args = list(map(str, arguments))
+                if '/git/ref/tags/' in args[2] and mode == 'lightweight':
+                    return json.dumps({'object': {'type': 'commit', 'sha': 'commit'}})
+                if '/git/tags/' in args[2] and mode == 'changed-annotation':
+                    return json.dumps({'message': '{}'})
+                return self.runner(args)
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                import_releases(self.allowlist, self.catalog, self.validator, 'Owner/Source',
+                                'localization/App/fi-FI/v1.0.0', runner=runner)
+        self.assertFalse(self.catalog.exists())
+
     def test_corrupted_release_does_not_enter_catalog(self):
         self.corrupt = True
         with self.assertRaises(subprocess.CalledProcessError):
             import_releases(self.allowlist, self.catalog, self.validator, 'Owner/Source', 'localization/App/fi-FI/v1.0.0', runner=self.runner)
         self.assertFalse((self.catalog / 'localization/localization-index.json').exists())
+
+
+class ContentTagRoutingTests(unittest.TestCase):
+    def test_explicit_binary_or_malformed_tag_is_rejected_before_fetch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'sources.json'
+            config.write_text('{"repositories":["Owner/Source"]}')
+            for tag in ('Gurux.AMI.SMTP/v1.0.0', 'Gurux.AMI.SMTP/assets/',
+                        'Gurux.AMI.SMTP/localization/vbad', 'resources/App/unit/vbad'):
+                calls = []
+                with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, 'content tag'):
+                    import_releases(config, directory, 'unused', 'Owner/Source', tag,
+                                    runner=lambda args: calls.append(args))
+                self.assertEqual(calls, [])
+
+
+class ModuleContentReleaseImportTests(ContentReleaseImportTests):
+    def setUp(self):
+        super().setUp()
+        (self.root / 'source/localization/en.json').write_text('{"Title":"Device"}')
+        self.prepared = []
+        for kind, directory in [('localization', 'localization'), ('resources', 'templates')]:
+            source = {'kind': kind, 'directory': str(self.root / 'source' / directory),
+                      'owner': 'Gurux.AMI.SMTP', 'ownerType': 'module',
+                      'ownerVersionRange': '[1.0.0,2.0.0)', 'defaultCulture': 'en', 'name': 'asset'}
+            config = self.root / (kind + '-module.json')
+            config.write_text(json.dumps({'sources': [source]}))
+            output = subprocess.check_output(['dotnet', self.validator, 'content', 'build-module',
+                '--sources', str(config), '--kind', kind, '--version', '1.0.0',
+                '--output', str(self.root / ('module-' + kind))], text=True)
+            prepared = json.loads(output)
+            self.prepared.extend(prepared if isinstance(prepared, list) else [prepared])
+        self.manifests = {item['tag']: json.loads(Path(item['manifest']).read_text()) for item in self.prepared}
+
+    def test_module_bundles_import_idempotently_without_reading_tag_annotations(self):
+        import_releases(self.allowlist, self.catalog, self.validator, runner=self.runner)
+        before = {p.relative_to(self.catalog): p.read_bytes() for p in self.catalog.rglob('*') if p.is_file()}
+        import_releases(self.allowlist, self.catalog, self.validator, runner=self.runner)
+        self.assertEqual(before, {p.relative_to(self.catalog): p.read_bytes() for p in self.catalog.rglob('*') if p.is_file()})
+        self.assertFalse(any('/git/' in arg for call in self.calls for arg in call))
+        for manifest in self.manifests.values():
+            self.assertTrue((self.catalog / manifest['kind'] / manifest['path']).is_file())
+
+    def test_module_manifest_type_or_identity_is_rejected_before_package_download(self):
+        for field, value in [('modulePackage', False), ('ownerType', 'application'),
+                             ('owner', 'Other'), ('kind', 'resources')]:
+            manifest = self.manifests['Gurux.AMI.SMTP/localization/v1.0.0']
+            original = dict(manifest)
+            try:
+                manifest[field] = value
+                item = next(item for item in self.prepared if item['tag'] == manifest['tag'])
+                Path(item['manifest']).write_text(json.dumps(manifest))
+                self.calls.clear()
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    import_releases(self.allowlist, self.catalog, self.validator, 'Owner/Source',
+                                    manifest['tag'], runner=self.runner)
+                self.assertFalse(any('--pattern' in call and call[call.index('--pattern') + 1] != 'release-manifest.json' for call in self.calls))
+            finally:
+                manifest.clear()
+                manifest.update(original)
+                Path(item['manifest']).write_text(json.dumps(manifest))
+
+    def test_existing_module_package_bytes_cannot_be_overwritten(self):
+        import_releases(self.allowlist, self.catalog, self.validator, runner=self.runner)
+        for manifest in self.manifests.values():
+            package = self.catalog / manifest['kind'] / manifest['path']
+            original = package.read_bytes()
+            try:
+                package.write_bytes(b'existing immutable bytes')
+                with self.subTest(kind=manifest['kind']), self.assertRaises(subprocess.CalledProcessError):
+                    import_releases(self.allowlist, self.catalog, self.validator, 'Owner/Source', manifest['tag'], runner=self.runner)
+                self.assertEqual(package.read_bytes(), b'existing immutable bytes')
+            finally:
+                package.write_bytes(original)
+
+    def test_missing_module_compatibility_range_is_rejected_by_shared_validator(self):
+        manifest = self.manifests['Gurux.AMI.SMTP/assets/v1.0.0']
+        manifest.pop('ownerVersionRange')
+        item = next(item for item in self.prepared if item['tag'] == manifest['tag'])
+        Path(item['manifest']).write_text(json.dumps(manifest))
+        with self.assertRaises(subprocess.CalledProcessError):
+            import_releases(self.allowlist, self.catalog, self.validator, 'Owner/Source', manifest['tag'], runner=self.runner)
+        self.assertFalse(self.catalog.exists())
+        self.assertFalse(any('--pattern' in call and call[call.index('--pattern') + 1] != 'release-manifest.json' for call in self.calls))
+
+    # Base fixtures use application-specific legacy tag literals.
+    test_draft_or_unregistered_dispatch_does_not_change_catalog = None
+    test_corrupted_release_does_not_enter_catalog = None
+    test_legacy_content_requires_matching_annotated_manifest = None

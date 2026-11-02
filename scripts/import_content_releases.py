@@ -13,6 +13,19 @@ def run(arguments):
     return subprocess.check_output(list(map(str, arguments)), text=True, encoding='utf-8')
 
 
+def content_tag(tag):
+    """Recognize content identities without mistaking binary module versions for content."""
+    identifier = r'[A-Za-z0-9][A-Za-z0-9_.-]*'
+    version = r'v[0-9]+(?:\.[0-9]+){2,3}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?'
+    module = re.fullmatch(fr'({identifier})/(localization|assets)/{version}', tag)
+    if module:
+        return ('localization' if module[2] == 'localization' else 'resources', True, module[1])
+    legacy = re.fullmatch(fr'(localization|resources)/({identifier})/({identifier})/{version}', tag)
+    if legacy:
+        return legacy[1], False, legacy[2]
+    return None
+
+
 def import_releases(configuration, root, validator, repository=None, tag=None, runner=run):
     repositories = json.loads(Path(configuration).read_text(encoding='utf-8'))['repositories']
     if not isinstance(repositories, list) or any(not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', value) for value in repositories):
@@ -21,6 +34,8 @@ def import_releases(configuration, root, validator, repository=None, tag=None, r
         raise ValueError('Dispatch repository is not registered for content publication')
     if tag and not repository:
         raise ValueError('A tag requires its registered repository')
+    if tag and content_tag(tag) is None:
+        raise ValueError('Invalid requested content tag')
     for source in [repository] if repository else repositories:
         if tag:
             releases = [json.loads(runner(['gh', 'api', f'repos/{source}/releases/tags/{quote(tag, safe="")}']))]
@@ -29,10 +44,12 @@ def import_releases(configuration, root, validator, repository=None, tag=None, r
             releases = [release for page in pages for release in page]
         for release in releases:
             release_tag = release['tag_name']
-            if not release_tag.startswith(('localization/', 'resources/')):
-                continue
             if tag and release_tag != tag:
                 raise ValueError('Release does not match requested tag')
+            identity = content_tag(release_tag)
+            if identity is None:
+                continue
+            kind, module_package, owner = identity
             if release.get('draft') or release.get('prerelease'):
                 if tag:
                     raise ValueError('Catalog accepts only successfully published stable content Releases')
@@ -45,15 +62,22 @@ def import_releases(configuration, root, validator, repository=None, tag=None, r
                 runner(['gh', 'release', 'download', release_tag, '--repo', source, '--pattern', 'release-manifest.json', '--dir', temporary])
                 manifest_path = temporary / 'release-manifest.json'
                 manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-                if manifest['tag'] != release_tag or manifest['kind'] != release_tag.split('/')[0]:
+                if manifest['tag'] != release_tag or manifest['kind'] != kind:
                     raise ValueError('Release and manifest tag/kind differ')
-                # The annotated tag, rather than an editable Release asset, reserves the immutable identity/hash.
-                reference = json.loads(runner(['gh', 'api', f'repos/{source}/git/ref/tags/{quote(release_tag, safe="")}']))
-                if reference['object']['type'] != 'tag':
-                    raise ValueError('Content releases require annotated tags')
-                annotation = json.loads(runner(['gh', 'api', f'repos/{source}/git/tags/{reference["object"]["sha"]}']))
-                if json.loads(annotation['message']) != manifest:
-                    raise ValueError('Release manifest differs from immutable annotated tag')
+                if module_package:
+                    if manifest.get('modulePackage') is not True or manifest.get('ownerType') != 'module' or manifest.get('owner') != owner:
+                        raise ValueError('Module content tag requires a matching module package manifest')
+                else:
+                    if manifest.get('modulePackage', False):
+                        raise ValueError('Legacy content tag cannot identify a module package')
+                    # Legacy tags reserve their immutable identity/hash in the annotation.
+                    reference = json.loads(runner(['gh', 'api', f'repos/{source}/git/ref/tags/{quote(release_tag, safe="")}']))
+                    if reference['object']['type'] != 'tag':
+                        raise ValueError('Content releases require annotated tags')
+                    annotation = json.loads(runner(['gh', 'api', f'repos/{source}/git/tags/{reference["object"]["sha"]}']))
+                    if json.loads(annotation['message']) != manifest:
+                        raise ValueError('Release manifest differs from immutable annotated tag')
+                # Validate the complete identity before using any package name or bytes.
                 runner(['dotnet', validator, 'content', 'verify-manifest', '--manifest', manifest_path])
                 name = manifest['package']
                 if not isinstance(name, str) or '/' in name or '\\' in name or name in ('.', '..') or name.startswith('-') or names.count(name) != 1:

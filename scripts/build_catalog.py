@@ -293,6 +293,9 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
                 cache[repository] = fetch(repository)
             source_releases = cache[repository]
         published_releases = [r for r in source_releases if not r.get('draft')]
+        if source['type'] == 'module':
+            published_releases = [r for r in published_releases
+                                  if not re.search(r'/(?:localization|assets)/', r['tag_name'])]
         if tag_prefix is not None:
             published_releases = [r for r in published_releases
                                   if r['tag_name'].startswith(tag_prefix)
