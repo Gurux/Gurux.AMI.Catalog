@@ -16,6 +16,39 @@ The generator copies the `localization/` directory beside `catalog-sources.json`
 
 Script publication works similarly: keep `scripts/script-index.json` and its referenced source files under `scripts/files/` in the repository. The generator copies both into the Pages output, excluding Python build tools. The initial script index is empty.
 
+## Module icons
+
+Store each icon with its module source, for example
+`Gurux.AMI.SMTP/assets/Smtp.svg` in `Gurux/Gurux.AMI.Modules`. Configure its
+repository-relative source path and public Catalog URL in `catalog-sources.json`:
+
+```json
+"iconPath": "Gurux.AMI.SMTP/assets/Smtp.svg",
+"iconUrl": "https://gurux.github.io/Gurux.AMI.Catalog/assets/Gurux.AMI.SMTP/Smtp.svg"
+```
+
+Each Catalog publication downloads this file from the module's selected release
+tag and writes `_site/assets/<module-id>/<filename>`. No copy in the Catalog
+repository is needed. The latest stable release among the catalog's selected
+releases supplies the icon; if only prereleases are selected, the latest one is
+used. Without a published release, the generated entry omits `iconUrl`.
+
+Commit an updated icon in the Modules repository and publish a new module
+version. Its existing Catalog notification rebuilds the catalog and fetches the
+new icon automatically. Changing an icon on a branch without publishing a module
+release does not update the public icon. Generated URLs include a content hash
+query so clients refresh changed images.
+
+Supported extensions are SVG, PNG, JPEG, WebP, GIF and ICO, with a 1 MiB limit.
+Paths must remain repository-relative. An icon fetch or validation failure stops
+publication and preserves the currently deployed site. Existing manually managed
+Catalog `assets/` files still work for entries without `iconPath`.
+
+`Gurux.Updater.Tool register-module` discovers a single image in the project's
+`assets` directory and writes these fields automatically. With multiple images,
+select one using `--icon assets/Smtp.svg`. Existing curated icon settings are
+preserved unless `--icon` is supplied.
+
 ## Module compatibility
 
 Modules configured with `compatibilityMetadata: true` supply a versioned `.compatibility.json` release asset. Catalog validates it and includes the required host DLL versions for AMI's pre-install compatibility check. Missing or invalid metadata preserves the previously published catalog.

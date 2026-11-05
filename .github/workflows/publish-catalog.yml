@@ -2,7 +2,7 @@ name: Publish AMI catalog
 
 on:
   repository_dispatch:
-    types: [module-release, localization-release, resources-release]
+    types: [module-release, agent-release, application-release, localization-release, resources-release]
   push:
     branches: [main]
     paths:

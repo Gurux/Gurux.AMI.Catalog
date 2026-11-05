@@ -77,6 +77,52 @@ def compatibility_references(source, release, version, fetch_metadata):
     return {'references': references, **release_metadata(metadata)}
 
 
+def compose_metadata(source, release, version, fetch_metadata):
+    """Attach only an uploaded, immutable sidecar owned by this exact release."""
+    name = f'{source["id"]}-{version}.compose.json'
+    matches = [a for a in release.get('assets', []) if a.get('name') == name and a.get('state') == 'uploaded']
+    if not matches:
+        return {}
+    if len(matches) != 1:
+        raise ValueError('Duplicate compose sidecar')
+    url = matches[0].get('browser_download_url')
+    uri = urlparse(url) if isinstance(url, str) else None
+    expected = f'/{source["repository"]}/releases/download/{release["tag_name"]}/{name}'
+    if (uri is None or uri.scheme != 'https' or uri.netloc != 'github.com'
+            or uri.query or uri.fragment or unquote(uri.path) != expected):
+        raise ValueError('Invalid compose sidecar URL')
+    metadata = fetch_metadata(url)
+    if (not isinstance(metadata, dict) or type(metadata.get('schemaVersion')) is not int
+            or metadata['schemaVersion'] != 1 or metadata.get('version') != version
+            or not re.fullmatch(r'[0-9]+(?:\.[0-9]+){1,3}(?:-[A-Za-z0-9.-]+)?', version)):
+        raise ValueError('Invalid compose sidecar identity')
+    value = metadata.get('compose')
+    fields = {'channel', 'platforms', 'images', 'containsWasm', 'rollbackCompatibleFrom', 'maintenanceRequired'}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError('Invalid compose metadata fields')
+    if value['channel'] not in ('stable', 'preview') or (value['channel'] == 'stable') == bool(release.get('prerelease')):
+        raise ValueError('Invalid compose channel for release')
+    platforms = value['platforms']
+    if (not isinstance(platforms, list) or not platforms
+            or any(not isinstance(x, str) or not re.fullmatch(r'linux/(?:amd64|arm64|arm/v7)', x) for x in platforms)
+            or len(set(platforms)) != len(platforms)):
+        raise ValueError('Invalid compose platforms')
+    images = value['images']
+    if (not isinstance(images, dict) or not images
+            or any(not re.fullmatch(r'[a-z][a-z0-9_-]*', role) or not isinstance(image, str)
+                   or not re.fullmatch(r'[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}', image)
+                   for role, image in images.items())):
+        raise ValueError('Compose images must use logical roles and immutable digest references')
+    if type(value['containsWasm']) is not bool or type(value['maintenanceRequired']) is not bool:
+        raise ValueError('Invalid compose booleans')
+    rollback = value['rollbackCompatibleFrom']
+    if rollback is not None:
+        release_metadata({'amiVersionRange': rollback})
+    if not value['maintenanceRequired'] and rollback is None:
+        raise ValueError('Automatic rollback requires an audited compatibility range')
+    return {'compose': value}
+
+
 def github_json(url):
     headers = {'Accept': 'application/vnd.github+json', 'User-Agent': 'Gurux-AMI-Catalog'}
     token = os.environ.get('GH_TOKEN')
@@ -244,6 +290,13 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
         provider = source.get('source', 'github')
         tag_prefix = source.get('tagPrefix')
         require_compatibility = source.get('compatibilityMetadata', False)
+        require_compose = source.get('composeMetadata', False)
+        if (not isinstance(require_compose, bool) or require_compose and
+                (provider != 'github' or source.get('type') != 'application' or identifier != 'Gurux.DLMS.AMI')):
+            raise ValueError('composeMetadata requires the GitHub AMI application source')
+        wasm_api_matches = source.get('apiVersionMatchesRelease', False)
+        if not isinstance(wasm_api_matches, bool) or (wasm_api_matches and source.get('type') != 'application'):
+            raise ValueError('apiVersionMatchesRelease requires an application source and boolean value')
         if (not isinstance(require_compatibility, bool)
                 or (require_compatibility and (provider != 'github' or source.get('type') != 'module'))):
             raise ValueError('compatibilityMetadata requires a GitHub module source and boolean value')
@@ -339,8 +392,17 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
             references = ({'references': validate_references(release['references'])}
                           if 'references' in release else {})
             references.update(release_metadata(release))
+            if wasm_api_matches:
+                # The static client is built together with this exact API release.
+                # Older releases without the new asset remain absent from this product.
+                if (len(assets) != 1 or assets[0]['name'] != f'{identifier}-{version}.zip'
+                        or not re.fullmatch(r'sha256:[0-9a-fA-F]{64}', assets[0].get('digest') or '')):
+                    continue
+                references['amiVersionRange'] = f'[{version}]'
             if require_compatibility and any(asset['name'].lower().endswith('.zip') for asset in assets):
                 references = compatibility_references(source, release, version, fetch_metadata)
+            if require_compose:
+                references.update(compose_metadata(source, release, version, fetch_metadata))
             versions.append({'version': version,
                              'priority': 'Critical' if security else 'Normal', 'isSecurityUpdate': security,
                              **references,

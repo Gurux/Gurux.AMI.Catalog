@@ -1,6 +1,44 @@
 {
     "items": [
         {
+            "id": "Gurux.DLMS.AMI",
+            "composeMetadata": true,
+            "type": "application",
+            "name": "Gurux DLMS AMI",
+            "description": "DLMS/COSEM meter management server with a Blazor web interface. Requires ASP.NET Core 10.",
+            "repository": "Gurux/Gurux.DLMS.AMI4",
+            "tagPrefix": "Gurux.DLMS.AMI/v",
+            "assetPattern": "Gurux.DLMS.AMI-*.zip",
+            "maintenanceStatus": "active",
+            "category": "meter-management",
+            "audience": "administrator"
+        },
+        {
+            "id": "Gurux.DLMS.AMI.Wasm",
+            "type": "application",
+            "name": "Gurux AMI static user interface",
+            "description": "Static Blazor WebAssembly client; requires the matching AMI API release.",
+            "repository": "Gurux/Gurux.DLMS.AMI4",
+            "tagPrefix": "Gurux.DLMS.AMI/v",
+            "assetPattern": "Gurux.DLMS.AMI.Wasm-*.zip",
+            "apiVersionMatchesRelease": true,
+            "maintenanceStatus": "active",
+            "category": "meter-management",
+            "audience": "administrator"
+        },
+        {
+            "id": "Gurux.DLMS.AMI.Agent",
+            "type": "agent",
+            "name": "Gurux DLMS AMI Agent",
+            "description": "Connects DLMS/COSEM meters to Gurux DLMS AMI. Portable agent package requiring .NET 10.",
+            "repository": "Gurux/Gurux.DLMS.AMI4",
+            "tagPrefix": "Gurux.DLMS.AMI.Agent/v",
+            "assetPattern": "Gurux.DLMS.AMI.Agent-*.zip",
+            "maintenanceStatus": "active",
+            "category": "communication",
+            "audience": "administrator"
+        },
+        {
             "id": "Gurux.Resources",
             "type": "configuration",
             "name": "Resource packages",
