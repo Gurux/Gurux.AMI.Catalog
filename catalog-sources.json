@@ -28,6 +28,7 @@
         },
         {
             "id": "Gurux.DLMS.AMI.Agent",
+            "compatibilityMetadata": true,
             "type": "agent",
             "name": "Gurux DLMS AMI Agent",
             "description": "Connects DLMS/COSEM meters to Gurux DLMS AMI. Portable agent package requiring .NET 10.",

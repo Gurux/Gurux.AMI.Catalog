@@ -55,5 +55,54 @@ class AgentReleaseTests(unittest.TestCase):
         self.assertEqual(agent['releases'][0]['assets'][0]['digest'], 'sha256:abc')
 
 
+class AgentCompatibilityTests(unittest.TestCase):
+    def fixture(self):
+        product = 'Gurux.DLMS.AMI.Agent'
+        version = '4.1.2611.601'
+        tag = f'{product}/v{version}'
+        name = f'{product}-{version}.compatibility.json'
+        source = {'id': product, 'type': 'agent', 'description': 'Agent',
+                  'repository': 'Gurux/Gurux.DLMS.AMI4', 'tagPrefix': f'{product}/v',
+                  'assetPattern': f'{product}-*.zip', 'compatibilityMetadata': True}
+        release = {'tag_name': tag, 'published_at': '2026-11-06T12:00:00Z', 'assets': [
+            {'name': f'{product}-{version}.zip', 'state': 'uploaded', 'size': 10,
+             'browser_download_url': 'https://example.org/agent.zip'},
+            {'name': name, 'state': 'uploaded', 'size': 100,
+             'browser_download_url': f'https://github.com/Gurux/Gurux.DLMS.AMI4/releases/download/{tag}/{name}'}]}
+        metadata = {'schemaVersion': 1, 'id': product, 'version': version,
+                    'targetFramework': 'net10.0',
+                    'references': [{'name': 'Gurux.DLMS.AMI.Script.dll', 'version': '4.1.2611.301'}]}
+        return source, release, metadata
+
+    def build(self, source, release, metadata):
+        return build_catalog({'items': [source]}, lambda repo: [release],
+                             fetch_metadata=lambda url: metadata)['items'][0]['releases'][0]
+
+    def test_script_dependency_is_copied_from_release_sidecar(self):
+        source, release, metadata = self.fixture()
+        self.assertEqual(self.build(source, release, metadata)['references'], metadata['references'])
+
+    def test_old_agent_without_sidecar_keeps_download(self):
+        source, release, metadata = self.fixture()
+        release['assets'].pop()
+        result = self.build(source, release, metadata)
+        self.assertNotIn('references', result)
+        self.assertEqual(result['assets'][0]['downloadUrl'], 'https://example.org/agent.zip')
+
+    def test_invalid_agent_metadata_is_rejected(self):
+        for mode in ('identity', 'other_dependency', 'duplicate', 'unpublished'):
+            source, release, metadata = self.fixture()
+            if mode == 'identity':
+                metadata['version'] = '0.0.0.1'
+            elif mode == 'other_dependency':
+                metadata['references'] = [{'name': 'Other.dll', 'version': '1.0.0.0'}]
+            elif mode == 'duplicate':
+                release['assets'].append(dict(release['assets'][1]))
+            else:
+                release['assets'][1]['state'] = 'new'
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                self.build(source, release, metadata)
+
+
 if __name__ == '__main__':
     unittest.main()

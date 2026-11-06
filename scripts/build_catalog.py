@@ -48,11 +48,13 @@ def fetch_compatibility_metadata(url):
 
 
 def compatibility_references(source, release, version, fetch_metadata):
-    """Require the published sidecar belonging to this exact module release."""
+    """Read exact release dependencies; older standalone agents can omit the sidecar."""
     name = f'{source["id"]}-{version}.compatibility.json'
     matches = [asset for asset in release.get('assets', [])
-               if asset.get('name') == name and asset.get('state') == 'uploaded']
-    if len(matches) != 1:
+               if asset.get('name') == name]
+    if not matches and source['type'] == 'agent':
+        return {}
+    if len(matches) != 1 or matches[0].get('state') != 'uploaded':
         raise ValueError(f'Expected exactly one uploaded compatibility sidecar: {name}')
     url = matches[0].get('browser_download_url')
     uri = urlparse(url) if isinstance(url, str) else None
@@ -68,6 +70,9 @@ def compatibility_references(source, release, version, fetch_metadata):
     references = validate_references(metadata.get('references'))
     if not references:
         raise ValueError(f'Compatibility references must not be empty: {name}')
+    if source['type'] == 'agent' and (len(references) != 1 or
+            references[0]['name'].lower() != 'gurux.dlms.ami.script.dll'):
+        raise ValueError('Agent compatibility must declare only Gurux.DLMS.AMI.Script.dll')
     seen = set()
     for reference in references:
         key = reference['name'].lower()
@@ -298,8 +303,8 @@ def build_catalog(sources, fetch, count=10, include_prereleases=True, *,
         if not isinstance(wasm_api_matches, bool) or (wasm_api_matches and source.get('type') != 'application'):
             raise ValueError('apiVersionMatchesRelease requires an application source and boolean value')
         if (not isinstance(require_compatibility, bool)
-                or (require_compatibility and (provider != 'github' or source.get('type') != 'module'))):
-            raise ValueError('compatibilityMetadata requires a GitHub module source and boolean value')
+                or (require_compatibility and (provider != 'github' or source.get('type') not in ('module', 'agent')))):
+            raise ValueError('compatibilityMetadata requires a GitHub module or agent source and boolean value')
         if 'tagPrefix' in source and (not isinstance(tag_prefix, str) or not tag_prefix.strip()):
             raise ValueError(f'tagPrefix must be a nonempty string for {identifier}')
         if provider not in ('github', 'local'):
