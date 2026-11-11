@@ -5,3 +5,5 @@ localization/packages/** -text
 localization/localization-index.json text eol=lf
 resources/packages/** -text
 resources/resource-index.json text eol=lf
+# Script manifests also hash the exact published source bytes.
+scripts/files/** -text whitespace=cr-at-eol
