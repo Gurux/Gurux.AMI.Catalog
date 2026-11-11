@@ -4,7 +4,7 @@
     {
       "schemaVersion": 1,
       "id": "Gurux.AMI.GetOrCreateGatewayByIp",
-      "version": "1.0.0",
+      "version": "4.1.2611.1101",
       "fileName": "GetOrCreateGatewayByIp.cs",
       "description": "Gets or creates a gateway using the sender IP address.",
       "author": "Gurux Ltd",
