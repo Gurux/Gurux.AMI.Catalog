@@ -1,4 +1,18 @@
 {
   "schemaVersion": 1,
-  "items": []
+  "items": [
+    {
+      "schemaVersion": 1,
+      "id": "Gurux.AMI.GetOrCreateGatewayByIp",
+      "version": "1.0.0",
+      "fileName": "GetOrCreateGatewayByIp.cs",
+      "description": "Gets or creates a gateway using the sender IP address.",
+      "author": "Gurux Ltd",
+      "license": "GPL-2.0-only",
+      "amiVersionRange": "[4.1.0,5.0.0)",
+      "sha256": "b86e9716b187443f7bea2b9dd830b2258352ae4b69c5f9322b1bc39362dba102",
+      "size": 1027,
+      "path": "files/b86e9716b187443f7bea2b9dd830b2258352ae4b69c5f9322b1bc39362dba102/GetOrCreateGatewayByIp.cs"
+    }
+  ]
 }
